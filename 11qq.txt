@@ -1,0 +1,304 @@
+
+npm i express dotenv bcrypt jsonwebtoken body-parser cors nodemon mongoose ejs
+thêm đoạn này zo: (--   "start": "nodemon src/index.js"  --)
+ 
+PORT = 9000
+MONGO_DB = mongodb://localhost:27017/product
+
+
+--------------------------------------------------------------------------
+const express = require("express");
+
+const dotenv = require("dotenv");
+
+const path = require('path'); // Import module path
+const monggoose = require("mongoose");
+const routes = require("./routes");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+
+const app = express()
+const port = process.env.PORT || 9000
+
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
+
+app.get('/', (req, res) => {
+    res.render('index'); 
+});
+app.use(cors())
+app.use(bodyParser.json())
+app.use(bodyParser.urlencoded( { extended: true } ));
+
+app.use(express.static('public'));
+routes(app);
+
+monggoose.connect('mongodb://localhost:27017/product', { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => {
+        console.log('Connect to MongoDB')
+    })
+    .catch((err) => {
+        console.log("MongoDB connection Error", err)
+    })
+
+app.listen(port, () => {
+    console.log('Server is running on port: ', port)
+})
+
+module.exports = app;
+
+
+// models/product.js
+const mongoose = require('mongoose');
+
+const productSchema = new mongoose.Schema(
+  {
+    productId: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    price: { type: String, required: true },
+    description: { type: String, required: true },
+  },
+  {
+    timestamps: true
+  } 
+);
+const Product = mongoose.model('Product', productSchema);
+module.exports = Product;
+
+-------------------------------------------------------------------------------------------------
+const ProductRouter = require("./product");
+
+function routes(app){
+    app.use('/api/product', ProductRouter)
+}
+module.exports = routes;
+
+
+
+// routes/index.js
+const express = require('express');
+const router = express.Router();
+const productController = require('../controllers/productController');
+
+// POST a new product
+router.post('/create', productController.createProduct);
+
+// DELETE a product
+router.delete('/delete/:productid', productController.deleteProduct);
+
+// PUT (update) a product
+router.put('/update/:productid', productController.updateProduct);
+
+// GET products by search
+router.get('/search/:productid', productController.getProduct);
+
+module.exports = router;
+
+
+
+const Product = require("../models/product");
+
+const createProduct = async (req, res) => {
+    try {
+        const productData = {
+            productId: req.body.productId,
+            name: req.body.name,
+            price: req.body.price,
+            description: req.body.description,
+        };
+        
+        const product = new Product(productData);
+        const savedProduct = await product.save();
+        return res.status(200).json({message: 'Place created successfully', data: savedProduct});
+    } catch (e) {
+        return res.status(500).json({
+            message: e
+        });
+    }
+}
+
+const getProduct = async (req, res) => {
+    try {
+        const productId = req.params.productid;
+        const response = await Product.findOne({ productId: productId });
+        return res.status(200).json(response);
+    } catch (e) {
+        return res.status(500).json({
+            message: e
+        });
+    }
+}
+
+const updateProduct = async (req, res) => {
+    try {
+        const productId = req.params.productid;
+        const data = req.body;
+        console.log(req.body);
+        const response = await Product.findOneAndUpdate({ productId: productId }, data, { new: true });
+        return res.status(200).json(response);
+    } catch (e) {
+        return res.status(500).json({
+            message: e
+        });
+    }
+}
+
+const deleteProduct = async (req, res) => {
+    try {
+        const productId = req.params.productid;
+        const response = await Product.deleteOne({ productId });
+        return res.status(200).json(response);
+    } catch (e) {
+        return res.status(500).json({
+            message: e
+        });
+    }
+}
+
+module.exports = {
+    createProduct,
+    getProduct,
+    updateProduct,
+    deleteProduct
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Management</title>
+</head>
+<body>
+    <h1>Product Management</h1>
+
+    <h2>Create Product:</h2>
+    <form id="createProductForm">
+        Product ID: <input type="text" id="productId"><br>
+        Name: <input type="text" id="name"><br>
+        Price: <input type="text" id="price"><br>
+        Description: <input type="text" id="description"><br>
+        <button type="submit">Create Product</button>
+    </form>
+
+    <h2>Get Product:</h2>
+    <form id="getProductForm">
+        Product ID: <input type="text" id="getProductId"><br>
+        <button type="submit">Get Product</button>
+    </form>
+    <div id="productDetails"></div>
+
+    <h2>Update Product:</h2>
+    <form id="updateProductForm">
+        Product ID: <input type="text" id="updateProductId"><br>
+        New Name: <input type="text" id="updateName"><br>
+        New Price: <input type="text" id="updatePrice"><br>
+        New Description: <input type="text" id="updateDescription"><br>
+        <button type="submit">Update Product</button>
+    </form>
+
+    <h2>Delete Product:</h2>
+    <form id="deleteProductForm">
+        Product ID: <input type="text" id="deleteProductId"><br>
+        <button type="submit">Delete Product</button>
+    </form>
+
+    <script>
+        document.getElementById('createProductForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const formData = {
+                productId: document.getElementById('productId').value,
+                name: document.getElementById('name').value,
+                price: document.getElementById('price').value,
+                description: document.getElementById('description').value
+            };
+            const response = await fetch('/api/product/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData),
+                
+            });
+            
+            const data = await response.json();
+            if (response.ok) {
+                alert('Product created successfully.');
+            } else {
+                alert('Failed to create product. Please try again later.');
+            }
+            
+        });
+
+        document.getElementById('getProductForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const productId = document.getElementById('getProductId').value;
+            const response = await fetch(`/api/product/search/${productId}`);
+            const data = await response.json();
+            if(data!==null) {
+                document.getElementById('productDetails').innerHTML = `
+                <p>${data.name}</p>
+                <p>${data.price}</p>
+                <p>${data.description}</p>
+                `;
+            }else{
+                alert('Failed to search product. Please try again')
+            }
+           
+        });
+
+        document.getElementById('updateProductForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const productId = document.getElementById('updateProductId').value;
+            const updateData = {
+                name: document.getElementById('updateName').value,
+                price: document.getElementById('updatePrice').value,
+                description: document.getElementById('updateDescription').value
+            };
+            const response = await fetch(`/api/product/update/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+            });
+            const data = await response.json();
+            console.log(data);
+            if (data!==null) {
+                alert('Product updated successfully.');
+            } else {
+                alert('Failed to update product. Please try again later.');
+            }
+        });
+
+        document.getElementById('deleteProductForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const productId = document.getElementById('deleteProductId').value;
+            const response = await fetch(`/api/product/delete/${productId}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            console.log(response);
+            
+            if (data.deletedCount!==0) {
+                alert('Product deleted successfully.');
+            } else {
+                alert('Failed to delete product. Please try again later.');
+            }
+        });
+    </script>
+</body>
+</html>
+
+Sr.No	URL		  				HTTP METHOD	POST body	Result
+
+1	http://localhost:9000/api/traveling/get:name	GET		empty		Hiện toàn bộ danh sách chuyến du lịch
+
+2	http://localhost:9000/api/traveling/create	POST		JSON String	Thêm chuyến du lịch mới
+
+3	http://localhost:9000/api/traveling/delete:id	DELETE		JSON String	Xóa chuyến du lịch bởi mã chuyến
+
+4	http://localhost:9000/api/traveling/update:id	PUT		JSON String	Cập nhật thông tin chuyến du lịch
+
+
+
